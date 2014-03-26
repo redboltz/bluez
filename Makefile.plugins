@@ -12,8 +12,8 @@ builtin_modules += policy
 builtin_sources += plugins/policy.c
 
 if MAINTAINER_MODE
-builtin_modules += gatt_example
-builtin_sources += plugins/gatt-example.c
+builtin_modules += gatt_my
+builtin_sources += plugins/gatt-my.c
 endif
 
 if EXPERIMENTAL
