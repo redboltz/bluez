@@ -29,6 +29,7 @@
 #include <glib.h>
 #include <errno.h>
 #include <gdbus/gdbus.h>
+#include <stdlib.h>
 
 #include "lib/uuid.h"
 #include "src/plugin.h"
@@ -63,12 +64,12 @@ struct my_adapter {
 
 static GSList *my_adapters = NULL;
 
-#define MY_STATE_MAX 100
+#define MY_STATE_MAX 0x200
 uint8_t g_buf[MY_STATE_MAX];
 
 
 /* Maximum length for "Text String Information" */
-#define NEW_MY_MAX_INFO_SIZE		18
+#define NEW_MY_MAX_INFO_SIZE		180
 /* Maximum length for New My Characteristic Value */
 #define NEW_MY_CHR_MAX_VALUE_SIZE	(NEW_MY_MAX_INFO_SIZE + 2)
 
@@ -105,7 +106,6 @@ static uint8_t my_state_write(struct attribute *a,
 static gboolean register_my_service(struct my_adapter *my_adapter)
 {
 	bt_uuid_t uuid;
-
 	bt_uuid16_create(&uuid, MY_SVC_UUID);
 
 	return gatt_service_add(
@@ -133,6 +133,12 @@ static gboolean register_my_service(struct my_adapter *my_adapter)
 
 		GATT_OPT_CHR_VALUE_GET_HANDLE,
 		&my_adapter->hnd_value,
+
+		GATT_OPT_CHR_AUTHENTICATION,
+		GATT_CHR_VALUE_BOTH,
+
+		GATT_OPT_CHR_AUTHORIZATION,
+		GATT_CHR_VALUE_BOTH,
 
 		GATT_OPT_INVALID);
 }
@@ -225,20 +231,59 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 
 	DBG("pnyo");
 	g_attrib_send(attrib, 0, pdu, len, destroy_notify_callback, cb, NULL);
+	g_attrib_set_mtu(attrib, 1000);
+
+}
+
+static gboolean is_notifiable_device(struct btd_device *device, uint16_t ccc)
+{
+	char *filename;
+	GKeyFile *key_file;
+	char handle[6];
+	char *str;
+	uint16_t val;
+	gboolean result;
+
+	sprintf(handle, "%hu", ccc);
+
+	filename = btd_device_get_storage_path(device, "ccc");
+	if (!filename) {
+		warn("Unable to get ccc storage path for device");
+		return FALSE;
+	}
+
+	key_file = g_key_file_new();
+	g_key_file_load_from_file(key_file, filename, 0, NULL);
+
+	str = g_key_file_get_string(key_file, handle, "Value", NULL);
+	if (!str) {
+		result = FALSE;
+		goto end;
+	}
+
+	val = strtol(str, NULL, 16);
+	if (!(val & 0x0001)) {
+		result = FALSE;
+		goto end;
+	}
+
+	result = TRUE;
+end:
+	g_free(str);
+	g_free(filename);
+	g_key_file_free(key_file);
+
+	return result;
 }
 
 static void filter_devices_notify(struct btd_device *device, void *user_data)
 {
 	struct notify_data *notify_data = user_data;
-#if 0
 	struct my_adapter *my_adapter = notify_data->my_adapter;
-#endif
 	struct notify_callback *cb;
 
-#if 0
 	if (!is_notifiable_device(device, my_adapter->hnd_ccc))
 		return;
-#endif
 
 	cb = g_new0(struct notify_callback, 1);
 	cb->notify_data = notify_data;
@@ -256,9 +301,16 @@ static void notify_devices(struct my_adapter *my_adapter,
 
 	notify_data = g_new0(struct notify_data, 1);
 	notify_data->my_adapter = my_adapter;
+	DBG("notify");
+	{
+	  size_t i = 0;
+	  for (; i < len; ++i) {
+		printf("%02x ", value[i]);
+	  }
+	  printf("\n");
+	}
 	notify_data->value = g_memdup(value, len);
 	notify_data->len = len;
-	DBG("hoge");
 	btd_adapter_for_each_device(my_adapter->adapter, filter_devices_notify,
 					notify_data);
 }
@@ -278,23 +330,28 @@ static void update_new_my(gpointer data, gpointer user_data)
 static DBusMessage *new_my(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
-	const char *category, *description;
-	uint16_t count;
+	const char *description;
 
-	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &category,
-			DBUS_TYPE_UINT16, &count, DBUS_TYPE_STRING,
-			&description, DBUS_TYPE_INVALID))
+	if (!dbus_message_get_args(msg,
+							   NULL,
+							   DBUS_TYPE_STRING,
+							   &description,
+							   DBUS_TYPE_INVALID))
 		return btd_error_invalid_args(msg);
 
 	{
 		uint8_t value[NEW_MY_CHR_MAX_VALUE_SIZE + 1];
-		uint8_t *ptr = value;
+		size_t dlen = strlen(description);
 		memset(value, 0, sizeof(value));
-		*ptr++ = 2; /* Attribute value size */
-		*ptr++ = 0; /* Category ID (mandatory) */
-		*ptr++ = 1; /* Number of New Alert (mandatory) */
+		/* Text String Information (optional) */
+		strncpy((char *)&value[1], description,
+						NEW_MY_MAX_INFO_SIZE - 1);
+		if (dlen > 0)
+			value[0] += dlen + 1;
+
+
 		update_new_my(my_adapters->data, value);
-		DBG("NewMy(\"%s\", %d, \"%s\")", category, count, description);
+		DBG("NewMy(\"%s\")",  description);
 	}
 	return dbus_message_new_method_return(msg);
 }
@@ -307,8 +364,7 @@ static struct btd_adapter_driver my_server = {
 
 static const GDBusMethodTable my_methods[] = {
 	{ GDBUS_METHOD("NewMy",
-			GDBUS_ARGS({ "category", "s" },
-				   { "count", "q" },
+			GDBUS_ARGS(
 				   { "description", "s" }), NULL,
 				   new_my) },
 	{ }
@@ -320,6 +376,10 @@ static void my_destroy(gpointer user_data)
 
 static int gatt_my_init(void)
 {
+  {
+	size_t i = 0;
+	for (; i < MY_STATE_MAX; ++i) g_buf[i] = i;
+  }
 	if (!g_dbus_register_interface(btd_get_dbus_connection(),
 					MY_OBJECT_PATH, MY_INTERFACE,
 					my_methods, NULL, NULL, NULL,
