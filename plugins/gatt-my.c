@@ -81,8 +81,6 @@ static uint8_t my_state_read(struct attribute *a,
 static uint8_t my_state_write(struct attribute *a,
 				  struct btd_device *device, gpointer user_data)
 {
-	struct btd_adapter *adapter = user_data;
-	int e;
 	size_t i = 0;
 	printf("write called\n");
 	for (; i < a->len; ++i) {
@@ -295,7 +293,7 @@ static void notify_devices(struct my_adapter *my_adapter,
 					notify_data);
 }
 
-static DBusMessage *new_my(DBusConnection *conn, DBusMessage *msg,
+static DBusMessage *my_notify(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
 	uint32_t size;
@@ -329,10 +327,10 @@ static struct btd_adapter_driver my_server = {
 /* bytes means a label (any string is ok) */
 /* ay means Array of Bytes */
 static const GDBusMethodTable my_methods[] = {
-	{ GDBUS_METHOD("NewMy",
+	{ GDBUS_METHOD("MyNotify",
 			GDBUS_ARGS(
 				   { "bytes", "ay" }), NULL,
-				   new_my) },
+				   my_notify) },
 	{ }
 };
 
