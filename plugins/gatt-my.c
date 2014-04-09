@@ -321,10 +321,43 @@ static DBusMessage *my_notify(DBusConnection *conn, DBusMessage *msg,
 		struct my_adapter *my_adapter = my_adapters->data;
 		struct btd_adapter *adapter = my_adapter->adapter;
 		printf("size:%d\n", size);
+
+		// FIXME: Required?
 		attrib_db_update(adapter, my_adapter->hnd_value, NULL,
 						 bytes, size, NULL);
+
 		notify_devices(my_adapter, bytes, size);
 		return dbus_message_new_method_return(msg);
+	}
+}
+
+static void get_min_mtu(struct btd_device *device, void *user_data)
+{
+	size_t* mtu = user_data;
+	size_t ret_mtu = min_mtu_from_device(device);
+	DBG("ret_mtu:%d\n", (int)ret_mtu);
+	if (ret_mtu < *mtu) *mtu = ret_mtu;
+}
+
+
+static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	struct my_adapter *my_adapter = my_adapters->data;
+	size_t mtu = UINT_MAX;
+	DBG("get_mtu\n");
+	btd_adapter_for_each_device(my_adapter->adapter, get_min_mtu,
+								&mtu);
+	DBG("for each end. mtu:%d\n", (int)mtu);
+	{
+		DBusMessage* rmsg;
+		dbus_bool_t bret;
+		rmsg = dbus_message_new_method_return(msg);
+		DBG("rmsg:%p\n", rmsg);
+		bret = dbus_message_append_args(rmsg, DBUS_TYPE_UINT32, &mtu);
+		DBG("bret = %d\n", bret);
+		DBG("mtu = %d\n", (int)mtu);
+		return rmsg;
 	}
 }
 
@@ -341,6 +374,10 @@ static const GDBusMethodTable my_methods[] = {
 			GDBUS_ARGS(
 				   { "bytes", "ay" }), NULL,
 				   my_notify) },
+	{ GDBUS_METHOD("GetMtu",
+			NULL, GDBUS_ARGS(
+				   { "mtu", "i" }),
+				   get_mtu) },
 	{ }
 };
 

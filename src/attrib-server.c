@@ -1140,6 +1140,29 @@ GAttrib *attrib_from_device(struct btd_device *device)
 	return NULL;
 }
 
+size_t min_mtu_from_device(struct btd_device *device)
+{
+	struct btd_adapter *adapter = device_get_adapter(device);
+	struct gatt_server *server;
+	GSList *l;
+	size_t mtu = UINT_MAX;
+
+	l = g_slist_find_custom(servers, adapter, adapter_cmp);
+	if (!l)
+		return 0;
+
+	server = l->data;
+
+	for (l = server->clients; l; l = l->next) {
+		struct gatt_channel *channel = l->data;
+
+		if (channel->mtu < mtu)
+			mtu = channel->mtu;
+	}
+
+	return mtu;
+}
+
 guint attrib_channel_attach(GAttrib *attrib)
 {
 	struct gatt_server *server;
