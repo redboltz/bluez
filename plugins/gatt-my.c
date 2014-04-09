@@ -178,20 +178,16 @@ struct notify_data {
 };
 
 struct notify_callback {
+	int ref_count;
 	struct notify_data *notify_data;
 	struct btd_device *device;
 	guint id;
 };
 
-static void destroy_notify_callback(guint8 status, const guint8 *pdu, guint16 len,
-							gpointer user_data)
+static void decrement_notify_callback(gpointer user_data)
 {
 	struct notify_callback *cb = user_data;
-
-	DBG("status=%#x", status);
-
-	btd_device_remove_attio_callback(cb->device, cb->id);
-	btd_device_unref(cb->device);
+	if (__sync_sub_and_fetch(&cb->ref_count, 1)) return;
 	g_free(cb->notify_data->value);
 	g_free(cb->notify_data);
 	g_free(cb);
@@ -202,16 +198,28 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 	struct notify_callback *cb = user_data;
 	struct notify_data *nd = cb->notify_data;
 	struct my_adapter *my_adapter = nd->my_adapter;
-	size_t len;
-	uint8_t *pdu = g_attrib_get_buffer(attrib, &len);
-	len = enc_notification(my_adapter->hnd_value,
-						   nd->value, nd->len, pdu, len);
-
-	DBG("Send notification for handle: 0x%04x, ccc: 0x%04x",
-					my_adapter->hnd_value,
-					my_adapter->hnd_ccc);
-
-	g_attrib_send(attrib, 0, pdu, len, destroy_notify_callback, cb, NULL);
+	size_t rest = nd->len;
+	size_t offset = 0;
+	while (offset < nd->len) {
+		size_t len;
+		uint8_t *pdu = g_attrib_get_buffer(attrib, &len);
+		const uint16_t min_len = sizeof(pdu[0]) + sizeof(uint16_t);
+		size_t payload_len = rest + min_len < len ? rest
+												  : len - min_len;
+		len = enc_notification(my_adapter->hnd_value,
+							   nd->value + offset,
+							   payload_len,
+							   pdu,
+							   len);
+		offset += payload_len;
+		rest -= payload_len;
+		__sync_fetch_and_add(&cb->ref_count, 1);
+		DBG("Send notification for handle: 0x%04x, ccc: 0x%04x",
+			my_adapter->hnd_value,
+			my_adapter->hnd_ccc);
+		g_attrib_send(attrib, 0, pdu, len, NULL, cb, decrement_notify_callback);
+	}
+	decrement_notify_callback(cb);
 }
 
 static gboolean is_notifiable_device(struct btd_device *device, uint16_t ccc)
@@ -265,6 +273,7 @@ static void filter_devices_notify(struct btd_device *device, void *user_data)
 		return;
 
 	cb = g_new0(struct notify_callback, 1);
+	cb->ref_count = 1;
 	cb->notify_data = notify_data;
 	cb->device = btd_device_ref(device);
 	cb->id = btd_device_add_attio_callback(device,
@@ -289,6 +298,7 @@ static void notify_devices(struct my_adapter *my_adapter,
 	}
 	notify_data->value = g_memdup(value, len);
 	notify_data->len = len;
+
 	btd_adapter_for_each_device(my_adapter->adapter, filter_devices_notify,
 					notify_data);
 }
