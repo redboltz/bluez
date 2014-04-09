@@ -13,7 +13,7 @@ AC_DEFUN([AC_PROG_CC_PIE], [
 AC_DEFUN([COMPILER_FLAGS], [
 	with_cflags=""
 	if (test "$USE_MAINTAINER_MODE" = "yes"); then
-		with_cflags="$with_cflags -Wall -Werror -Wextra"
+		with_cflags="$with_cflags -Wall -Wextra"
 		with_cflags="$with_cflags -Wno-unused-parameter"
 		with_cflags="$with_cflags -Wno-missing-field-initializers"
 		with_cflags="$with_cflags -Wdeclaration-after-statement"

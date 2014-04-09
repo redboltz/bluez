@@ -52,8 +52,8 @@
 #define MY_STATE_UUID		0xBEEF
 
 
-#define MY_OBJECT_PATH		"/org/my"
-#define MY_INTERFACE		"org.my"
+#define MY_OBJECT_PATH		"/org/bluez/my"
+#define MY_INTERFACE		"org.bluez.my"
 
 
 struct my_adapter {
@@ -66,14 +66,6 @@ static GSList *my_adapters = NULL;
 
 #define MY_STATE_MAX 0x200
 uint8_t g_buf[MY_STATE_MAX];
-
-
-/* Maximum length for "Text String Information" */
-#define NEW_MY_MAX_INFO_SIZE		180
-/* Maximum length for New My Characteristic Value */
-#define NEW_MY_CHR_MAX_VALUE_SIZE	(NEW_MY_MAX_INFO_SIZE + 2)
-
-#define NOTIFY_NEW_MY 0
 
 static uint8_t my_state_read(struct attribute *a,
 				  struct btd_device *device, gpointer user_data)
@@ -94,12 +86,10 @@ static uint8_t my_state_write(struct attribute *a,
 	size_t i = 0;
 	printf("write called\n");
 	for (; i < a->len; ++i) {
-	  printf("%02x", a->data[i]);
-	  g_buf[i] = a->data[i];
+		printf("%02x", a->data[i]);
+		g_buf[i] = a->data[i];
 	}
 	printf("\n");
-	e = attrib_db_update(adapter, a->handle, NULL, g_buf, sizeof(g_buf), NULL);
-	printf("%d\n",e);
 	return 0;
 }
 
@@ -133,12 +123,6 @@ static gboolean register_my_service(struct my_adapter *my_adapter)
 
 		GATT_OPT_CHR_VALUE_GET_HANDLE,
 		&my_adapter->hnd_value,
-
-		GATT_OPT_CHR_AUTHENTICATION,
-		GATT_CHR_VALUE_BOTH,
-
-		GATT_OPT_CHR_AUTHORIZATION,
-		GATT_CHR_VALUE_BOTH,
 
 		GATT_OPT_INVALID);
 }
@@ -229,10 +213,7 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 					my_adapter->hnd_value,
 					my_adapter->hnd_ccc);
 
-	DBG("pnyo");
 	g_attrib_send(attrib, 0, pdu, len, destroy_notify_callback, cb, NULL);
-	g_attrib_set_mtu(attrib, 1000);
-
 }
 
 static gboolean is_notifiable_device(struct btd_device *device, uint16_t ccc)
@@ -288,7 +269,6 @@ static void filter_devices_notify(struct btd_device *device, void *user_data)
 	cb = g_new0(struct notify_callback, 1);
 	cb->notify_data = notify_data;
 	cb->device = btd_device_ref(device);
-	DBG("fuga");
 	cb->id = btd_device_add_attio_callback(device,
 						attio_connected_cb, NULL, cb);
 }
@@ -315,45 +295,29 @@ static void notify_devices(struct my_adapter *my_adapter,
 					notify_data);
 }
 
-
-static void update_new_my(gpointer data, gpointer user_data)
-{
-	struct my_adapter *my_adapter = data;
-	struct btd_adapter *adapter = my_adapter->adapter;
-	uint8_t *value = user_data;
-
-	attrib_db_update(adapter, my_adapter->hnd_value, NULL,
-						&value[1], value[0], NULL);
-	notify_devices(my_adapter, &value[1], value[0]);
-}
-
 static DBusMessage *new_my(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
-	const char *description;
-
+	uint32_t size;
+	uint8_t* bytes;
 	if (!dbus_message_get_args(msg,
 							   NULL,
-							   DBUS_TYPE_STRING,
-							   &description,
-							   DBUS_TYPE_INVALID))
+							   DBUS_TYPE_ARRAY,
+							   DBUS_TYPE_BYTE,
+							   &bytes,
+							   &size,
+							   DBUS_TYPE_INVALID)) {
 		return btd_error_invalid_args(msg);
-
-	{
-		uint8_t value[NEW_MY_CHR_MAX_VALUE_SIZE + 1];
-		size_t dlen = strlen(description);
-		memset(value, 0, sizeof(value));
-		/* Text String Information (optional) */
-		strncpy((char *)&value[1], description,
-						NEW_MY_MAX_INFO_SIZE - 1);
-		if (dlen > 0)
-			value[0] += dlen + 1;
-
-
-		update_new_my(my_adapters->data, value);
-		DBG("NewMy(\"%s\")",  description);
 	}
-	return dbus_message_new_method_return(msg);
+	{
+		struct my_adapter *my_adapter = my_adapters->data;
+		struct btd_adapter *adapter = my_adapter->adapter;
+		printf("size:%d\n", size);
+		attrib_db_update(adapter, my_adapter->hnd_value, NULL,
+						 bytes, size, NULL);
+		notify_devices(my_adapter, bytes, size);
+		return dbus_message_new_method_return(msg);
+	}
 }
 
 static struct btd_adapter_driver my_server = {
@@ -362,10 +326,12 @@ static struct btd_adapter_driver my_server = {
 	.remove	= my_server_remove,
 };
 
+/* bytes means a label (any string is ok) */
+/* ay means Array of Bytes */
 static const GDBusMethodTable my_methods[] = {
 	{ GDBUS_METHOD("NewMy",
 			GDBUS_ARGS(
-				   { "description", "s" }), NULL,
+				   { "bytes", "ay" }), NULL,
 				   new_my) },
 	{ }
 };
