@@ -75,6 +75,35 @@ static uint8_t my_state_read(struct attribute *a,
 	printf("read called\n");
 	e = attrib_db_update(adapter, a->handle, NULL, g_buf, sizeof(g_buf), NULL);
 	printf("%d\n",e);
+	{
+		DBusError e;
+		DBusConnection* conn;
+		DBusMessage* msg;
+		DBusMessage* rmsg;
+		dbus_error_init(&e);
+		conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
+		if (dbus_error_is_set(&e)) {
+			printf("name: %s\n", e.name);
+			printf("mesg: %s\n", e.message);
+			return 0;
+		}
+		msg = dbus_message_new_method_call(
+			"org.myapp",
+			"/org/myapp/server",
+			"org.myapp.server",
+			"read");
+		dbus_error_init(&e);
+		rmsg = dbus_connection_send_with_reply_and_block(
+			conn,
+			msg,
+			1000,
+			&e);
+		if (dbus_error_is_set(&e)) {
+			printf("name: %s\n", e.name);
+			printf("mesg: %s\n", e.message);
+			return 0;
+		}
+	}
 	return 0;
 }
 
@@ -104,7 +133,7 @@ static gboolean register_my_service(struct my_adapter *my_adapter)
 		GATT_OPT_CHR_UUID16,
 		MY_STATE_UUID,
 		GATT_OPT_CHR_PROPS,
-		GATT_CHR_PROP_READ | GATT_CHR_PROP_WRITE | GATT_CHR_PROP_NOTIFY,
+		GATT_CHR_PROP_READ | GATT_CHR_PROP_WRITE | GATT_CHR_PROP_NOTIFY | GATT_CHR_PROP_INDICATE,
 
 		GATT_OPT_CHR_VALUE_CB,
 		ATTRIB_READ,
