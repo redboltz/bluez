@@ -942,6 +942,106 @@ static uint16_t write_value(struct gatt_channel *channel, uint16_t handle,
 	return enc_write_resp(pdu);
 }
 
+static uint16_t prep_write_value(struct gatt_channel *channel, uint16_t handle,
+					const uint8_t *value, uint16_t offset, size_t vlen,
+					uint8_t *pdu, size_t len)
+{
+	struct attribute *a;
+	uint8_t status;
+	GList *l;
+	guint h = handle;
+
+	l = g_list_find_custom(channel->server->database,
+					GUINT_TO_POINTER(h), handle_cmp);
+	if (!l)
+		return enc_error_resp(ATT_OP_PREP_WRITE_REQ, handle,
+				ATT_ECODE_INVALID_HANDLE, pdu, len);
+
+	a = l->data;
+
+	a->len += vlen;
+	a->data = g_try_realloc(a->data, a->len);
+	if (vlen && a->data == NULL)
+		return enc_error_resp(ATT_OP_PREP_WRITE_REQ, handle,
+				ATT_ECODE_INSUFF_RESOURCES, pdu, len);
+
+	memcpy(a->data + offset, value, vlen);
+	return enc_prep_write_resp(handle, offset, value, vlen, pdu, len);
+}
+
+static uint16_t exec_write(struct gatt_channel *channel, uint16_t handle,
+					uint8_t *pdu, size_t len)
+{
+	struct attribute *a;
+	uint8_t status;
+	GList *l;
+	guint h = handle;
+
+	l = g_list_find_custom(channel->server->database,
+					GUINT_TO_POINTER(h), handle_cmp);
+	if (!l)
+		return enc_error_resp(ATT_OP_EXEC_WRITE_REQ, handle,
+				ATT_ECODE_INVALID_HANDLE, pdu, len);
+
+	a = l->data;
+
+#if 0
+	status = att_check_reqs(channel, ATT_OP_WRITE_REQ, a->write_req);
+	if (status)
+		return enc_error_resp(ATT_OP_WRITE_REQ, handle, status, pdu,
+									len);
+#endif
+
+	if (bt_uuid_cmp(&ccc_uuid, &a->uuid) != 0) {
+
+		attrib_db_update(channel->server->adapter, handle, NULL,
+							a->data, a->len, NULL);
+
+		if (a->write_cb) {
+			status = a->write_cb(a, channel->device,
+							a->cb_user_data);
+			if (status)
+				return enc_error_resp(ATT_OP_EXEC_WRITE_REQ, handle,
+							status, pdu, len);
+		}
+	} else {
+		uint16_t cccval = get_le16(a->data);
+		char *filename;
+		GKeyFile *key_file;
+		char group[6], value[5];
+		char *data;
+		gsize length = 0;
+
+		filename = btd_device_get_storage_path(channel->device, "ccc");
+		if (!filename) {
+			warn("Unable to get ccc storage path for device");
+			return enc_error_resp(ATT_OP_EXEC_WRITE_REQ, handle,
+						ATT_ECODE_WRITE_NOT_PERM,
+						pdu, len);
+		}
+
+		key_file = g_key_file_new();
+		g_key_file_load_from_file(key_file, filename, 0, NULL);
+
+		sprintf(group, "%hu", handle);
+		sprintf(value, "%hX", cccval);
+		g_key_file_set_string(key_file, group, "Value", value);
+
+		data = g_key_file_to_data(key_file, &length, NULL);
+		if (length > 0) {
+			create_file(filename, S_IRUSR | S_IWUSR);
+			g_file_set_contents(filename, data, length, NULL);
+		}
+
+		g_free(data);
+		g_free(filename);
+		g_key_file_free(key_file);
+	}
+
+	return enc_exec_write_resp(pdu);
+}
+
+
 static uint16_t mtu_exchange(struct gatt_channel *channel, uint16_t mtu,
 						uint8_t *pdu, size_t len)
 {
@@ -994,7 +1094,8 @@ static void channel_handler(const uint8_t *ipdu, uint16_t len,
 	uint8_t status = 0;
 	size_t vlen;
 	uint8_t *value = g_attrib_get_buffer(channel->attrib, &vlen);
-
+	uint8_t flags;
+	static uint16_t prep_handle;
 	DBG("op 0x%02x", ipdu[0]);
 
 	if (len > vlen) {
@@ -1040,6 +1141,7 @@ static void channel_handler(const uint8_t *ipdu, uint16_t len,
 			goto done;
 		}
 
+		printf("offset: %d\n", (int)offset);
 		length = read_blob(channel, start, offset, opdu, channel->mtu);
 		break;
 	case ATT_OP_MTU_REQ:
@@ -1098,9 +1200,29 @@ static void channel_handler(const uint8_t *ipdu, uint16_t len,
 	case ATT_OP_HANDLE_NOTIFY:
 		/* The attribute client is already handling these */
 		return;
-	case ATT_OP_READ_MULTI_REQ:
 	case ATT_OP_PREP_WRITE_REQ:
+		length = dec_prep_write_req(ipdu, len, &start, &offset, value, &vlen);
+		if (length == 0) {
+			status = ATT_ECODE_INVALID_PDU;
+			goto done;
+		}
+
+		length = prep_write_value(channel, start, value, offset, vlen, opdu,
+								  channel->mtu);
+		prep_handle = start;
+		break;
+
 	case ATT_OP_EXEC_WRITE_REQ:
+		length = dec_exec_write_req(ipdu, len, &flags);
+		if (length == 0) {
+			status = ATT_ECODE_INVALID_PDU;
+			goto done;
+		}
+
+		length = exec_write(channel, prep_handle, opdu,
+							channel->mtu);
+		break;
+	case ATT_OP_READ_MULTI_REQ:
 	default:
 		DBG("Unsupported request 0x%02x", ipdu[0]);
 		status = ATT_ECODE_REQ_NOT_SUPP;

@@ -60,6 +60,7 @@ struct my_adapter {
 	struct btd_adapter	*adapter;
 	uint16_t hnd_ccc;
 	uint16_t hnd_value;
+	gboolean updated;
 };
 
 static GSList *my_adapters = NULL;
@@ -67,49 +68,55 @@ static GSList *my_adapters = NULL;
 #define MY_STATE_MAX 0x200
 uint8_t g_buf[MY_STATE_MAX];
 
-static uint8_t my_state_read(struct attribute *a,
-				  struct btd_device *device, gpointer user_data)
+static uint8_t my_state_read(
+	struct attribute *a,
+	struct btd_device *device,
+	gpointer user_data)
 {
-	struct btd_adapter *adapter = user_data;
+	struct my_adapter *my_adapter = user_data;
 	int e;
-	printf("read called\n");
-	e = attrib_db_update(adapter, a->handle, NULL, g_buf, sizeof(g_buf), NULL);
-	printf("%d\n",e);
-	{
-		DBusError e;
-		DBusConnection* conn;
-		DBusMessage* msg;
-		DBusMessage* rmsg;
-		dbus_error_init(&e);
-		conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
-		if (dbus_error_is_set(&e)) {
-			printf("name: %s\n", e.name);
-			printf("mesg: %s\n", e.message);
-			return 0;
-		}
-		msg = dbus_message_new_method_call(
-			"org.myapp",
-			"/org/myapp/server",
-			"org.myapp.server",
-			"read");
-		dbus_error_init(&e);
-		rmsg = dbus_connection_send_with_reply_and_block(
-			conn,
-			msg,
-			1000,
-			&e);
-		if (dbus_error_is_set(&e)) {
-			printf("name: %s\n", e.name);
-			printf("mesg: %s\n", e.message);
-			return 0;
+	if (my_adapter->updated) {
+		e = attrib_db_update(my_adapter->adapter, a->handle, NULL, g_buf, sizeof(g_buf), NULL);
+		printf("%d\n",e);
+		{
+			DBusError e;
+			DBusConnection* conn;
+			DBusMessage* msg;
+			DBusMessage* rmsg;
+			dbus_error_init(&e);
+			conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
+			if (dbus_error_is_set(&e)) {
+				printf("name: %s\n", e.name);
+				printf("mesg: %s\n", e.message);
+				return 0;
+			}
+			msg = dbus_message_new_method_call(
+											   "org.myapp",
+											   "/org/myapp/server",
+											   "org.myapp.server",
+											   "read");
+			dbus_error_init(&e);
+			rmsg = dbus_connection_send_with_reply_and_block(
+															 conn,
+															 msg,
+															 1000,
+															 &e);
+			if (dbus_error_is_set(&e)) {
+				printf("name: %s\n", e.name);
+				printf("mesg: %s\n", e.message);
+				return 0;
+			}
 		}
 	}
 	return 0;
 }
 
-static uint8_t my_state_write(struct attribute *a,
-				  struct btd_device *device, gpointer user_data)
+static uint8_t my_state_write(
+	struct attribute *a,
+	struct btd_device *device,
+	gpointer user_data)
 {
+	struct my_adapter *my_adapter = user_data;
 	size_t i = 0;
 	printf("write called\n");
 	for (; i < a->len; ++i) {
@@ -117,6 +124,7 @@ static uint8_t my_state_write(struct attribute *a,
 		g_buf[i] = a->data[i];
 	}
 	printf("\n");
+	my_adapter->updated = true;
 	return 0;
 }
 
@@ -138,12 +146,12 @@ static gboolean register_my_service(struct my_adapter *my_adapter)
 		GATT_OPT_CHR_VALUE_CB,
 		ATTRIB_READ,
 		my_state_read,
-		my_adapter->adapter,
+		my_adapter,
 
 		GATT_OPT_CHR_VALUE_CB,
 		ATTRIB_WRITE,
 		my_state_write,
-		my_adapter->adapter,
+		my_adapter,
 
 		GATT_OPT_CCC_GET_HANDLE,
 		&my_adapter->hnd_ccc,
@@ -160,7 +168,7 @@ static int my_server_probe(struct btd_adapter *adapter)
 
 	my_adapter = g_new0(struct my_adapter, 1);
 	my_adapter->adapter = btd_adapter_ref(adapter);
-
+	my_adapter->updated = true;
 	if (!register_my_service(my_adapter)) {
 		DBG("Myservice could not be registered");
 		g_free(my_adapter);
