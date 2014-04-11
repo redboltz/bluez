@@ -65,19 +65,14 @@ struct my_adapter {
 
 static GSList *my_adapters = NULL;
 
-#define MY_STATE_MAX 0x200
-uint8_t g_buf[MY_STATE_MAX];
-
 static uint8_t my_state_read(
 	struct attribute *a,
 	struct btd_device *device,
 	gpointer user_data)
 {
 	struct my_adapter *my_adapter = user_data;
-	int e;
 	if (my_adapter->updated) {
-		e = attrib_db_update(my_adapter->adapter, a->handle, NULL, g_buf, sizeof(g_buf), NULL);
-		printf("%d\n",e);
+		my_adapter->updated = false;
 		{
 			DBusError e;
 			DBusConnection* conn;
@@ -91,20 +86,36 @@ static uint8_t my_state_read(
 				return 0;
 			}
 			msg = dbus_message_new_method_call(
-											   "org.myapp",
-											   "/org/myapp/server",
-											   "org.myapp.server",
-											   "read");
+			   "org.myapp",
+			   "/org/myapp/server",
+			   "org.myapp.server",
+			   "read");
 			dbus_error_init(&e);
 			rmsg = dbus_connection_send_with_reply_and_block(
-															 conn,
-															 msg,
-															 1000,
-															 &e);
+				conn,
+				msg,
+				1000,
+				&e);
 			if (dbus_error_is_set(&e)) {
 				printf("name: %s\n", e.name);
 				printf("mesg: %s\n", e.message);
 				return 0;
+			}
+			{
+				int e;
+				uint32_t size;
+				uint8_t* bytes;
+				if (!dbus_message_get_args(
+					rmsg,
+					NULL,
+					DBUS_TYPE_ARRAY,
+					DBUS_TYPE_BYTE,
+					&bytes,
+					&size,
+					DBUS_TYPE_INVALID)) {
+					return 0;
+				}
+				e = attrib_db_update(my_adapter->adapter, a->handle, NULL, bytes, size, NULL);
 			}
 		}
 	}
@@ -117,13 +128,46 @@ static uint8_t my_state_write(
 	gpointer user_data)
 {
 	struct my_adapter *my_adapter = user_data;
-	size_t i = 0;
 	printf("write called\n");
-	for (; i < a->len; ++i) {
-		printf("%02x", a->data[i]);
-		g_buf[i] = a->data[i];
+	{
+		DBusError e;
+		DBusConnection* conn;
+		DBusMessage* msg;
+		DBusMessage* rmsg;
+		dbus_bool_t bret;
+		dbus_error_init(&e);
+		conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
+		printf("conn: %p\n", conn);
+		if (dbus_error_is_set(&e)) {
+			printf("name: %s\n", e.name);
+			printf("mesg: %s\n", e.message);
+			return 0;
+		}
+		msg = dbus_message_new_method_call(
+			"org.myapp",
+			"/org/myapp/server",
+			"org.myapp.server",
+			"write");
+		bret = dbus_message_append_args(
+			msg,
+			DBUS_TYPE_ARRAY,
+			DBUS_TYPE_BYTE,
+			&a->data,
+			a->len,
+			DBUS_TYPE_INVALID);
+		printf("bret: %d\n", bret);
+		dbus_error_init(&e);
+		rmsg = dbus_connection_send_with_reply_and_block(
+			conn,
+			msg,
+			1000,
+			&e);
+		if (dbus_error_is_set(&e)) {
+			printf("name: %s\n", e.name);
+			printf("mesg: %s\n", e.message);
+			return 0;
+		}
 	}
-	printf("\n");
 	my_adapter->updated = true;
 	return 0;
 }
@@ -424,10 +468,6 @@ static void my_destroy(gpointer user_data)
 
 static int gatt_my_init(void)
 {
-  {
-	size_t i = 0;
-	for (; i < MY_STATE_MAX; ++i) g_buf[i] = i;
-  }
 	if (!g_dbus_register_interface(btd_get_dbus_connection(),
 					MY_OBJECT_PATH, MY_INTERFACE,
 					my_methods, NULL, NULL, NULL,

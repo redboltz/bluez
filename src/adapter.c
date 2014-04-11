@@ -640,7 +640,7 @@ static void local_name_changed_callback(uint16_t index, uint16_t length,
 
 	attrib_gap_set(adapter, GATT_CHARAC_DEVICE_NAME,
 				(const uint8_t *) adapter->current_alias,
-					strlen(adapter->current_alias));
+				   strlen(adapter->current_alias));
 }
 
 static void set_local_name_complete(uint8_t status, uint16_t length,
