@@ -886,12 +886,10 @@ static uint16_t write_value(struct gatt_channel *channel, uint16_t handle,
 
 	a = l->data;
 
-#if 0
 	status = att_check_reqs(channel, ATT_OP_WRITE_REQ, a->write_req);
 	if (status)
 		return enc_error_resp(ATT_OP_WRITE_REQ, handle, status, pdu,
 									len);
-#endif
 
 	if (bt_uuid_cmp(&ccc_uuid, &a->uuid) != 0) {
 
