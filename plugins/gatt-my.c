@@ -350,9 +350,18 @@ static void filter_devices_notify(struct btd_device *device, void *user_data)
 	struct my_adapter *my_adapter = notify_data->my_adapter;
 	struct notify_callback *cb;
 
-	if (!is_notifiable_device(device, my_adapter->hnd_ccc))
+	if (!is_notifiable_device(device, my_adapter->hnd_ccc)) {
+		DBG("Device is not notificable\n");
 		return;
-
+	}
+	DBG("notify");
+	{
+	  size_t i = 0;
+	  for (; i < notify_data->len; ++i) {
+		printf("%02x ", notify_data->value[i]);
+	  }
+	  printf("\n");
+	}
 	cb = g_new0(struct notify_callback, 1);
 	cb->ref_count = 1;
 	cb->notify_data = notify_data;
@@ -369,14 +378,6 @@ static void notify_devices(struct my_adapter *my_adapter,
 
 	notify_data = g_new0(struct notify_data, 1);
 	notify_data->my_adapter = my_adapter;
-	DBG("notify");
-	{
-	  size_t i = 0;
-	  for (; i < len; ++i) {
-		printf("%02x ", value[i]);
-	  }
-	  printf("\n");
-	}
 	notify_data->value = g_memdup(value, len);
 	notify_data->len = len;
 
