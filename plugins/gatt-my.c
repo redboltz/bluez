@@ -404,10 +404,6 @@ static DBusMessage *my_notify(DBusConnection *conn, DBusMessage *msg,
 		struct btd_adapter *adapter = my_adapter->adapter;
 		printf("size:%d\n", size);
 
-		// FIXME: Required?
-		attrib_db_update(adapter, my_adapter->hnd_value, NULL,
-						 bytes, size, NULL);
-
 		notify_devices(my_adapter, bytes, size);
 		return dbus_message_new_method_return(msg);
 	}
