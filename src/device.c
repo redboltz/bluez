@@ -2355,13 +2355,13 @@ char *btd_device_get_storage_path(struct btd_device *device,
 				const char *filename)
 {
 	char srcaddr[18], dstaddr[18];
-
+#if 0
 	if (device_address_is_private(device)) {
 		warn("Refusing storage path for private addressed device %s",
 								device->path);
 		return NULL;
 	}
-
+#endif
 	ba2str(btd_adapter_get_address(device->adapter), srcaddr);
 	ba2str(&device->bdaddr, dstaddr);
 
