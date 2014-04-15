@@ -100,6 +100,15 @@ attrib_sources = attrib/att.h attrib/att-database.h attrib/att.c \
 		attrib/gattrib.h attrib/gattrib.c \
 		attrib/gatt-service.h attrib/gatt-service.c
 
+noinst_LTLIBRARIES += attrib/libgatt.la
+attrib_libgatt_la_SOURCES = attrib/att.h attrib/att-database.h attrib/att.c \
+		attrib/gatt.h attrib/gatt.c \
+		attrib/gattrib.h attrib/gattrib.c \
+		attrib/gatt-service.h attrib/gatt-service.c \
+		src/log.h src/log.c \
+		btio/btio.h btio/btio.c
+attrib_libgatt_la_CFLAGS=$(AM_CFLAGS)
+
 btio_sources = btio/btio.h btio/btio.c
 
 gobex_sources = gobex/gobex.h gobex/gobex.c \
