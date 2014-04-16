@@ -257,6 +257,9 @@ static gboolean add_characteristic(struct btd_adapter *adapter,
 		case ATTRIB_WRITE:
 			a->write_cb = cb->fn;
 			break;
+		case ATTRIB_CONFIRM:
+			a->confirm_cb = cb->fn;
+			break;
 		}
 
 		a->cb_user_data = cb->user_data;

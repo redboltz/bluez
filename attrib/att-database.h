@@ -37,6 +37,8 @@ struct attribute {
 							gpointer user_data);
 	uint8_t (*write_cb)(struct attribute *a, struct btd_device *device,
 							gpointer user_data);
+	uint8_t (*confirm_cb)(struct attribute *a, struct btd_device *device,
+							gpointer user_data);
 	gpointer cb_user_data;
 	size_t len;
 	uint8_t *data;
