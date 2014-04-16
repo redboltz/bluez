@@ -102,7 +102,6 @@ static uint8_t my_state_read(
 				return 0;
 			}
 			{
-				int e;
 				uint32_t size;
 				uint8_t* bytes;
 				if (!dbus_message_get_args(
@@ -115,7 +114,7 @@ static uint8_t my_state_read(
 					DBUS_TYPE_INVALID)) {
 					return 0;
 				}
-				e = attrib_db_update(my_adapter->adapter, a->handle, NULL, bytes, size, NULL);
+				attrib_db_update(my_adapter->adapter, a->handle, NULL, bytes, size, NULL);
 			}
 		}
 	}
@@ -133,7 +132,6 @@ static uint8_t my_state_write(
 		DBusError e;
 		DBusConnection* conn;
 		DBusMessage* msg;
-		DBusMessage* rmsg;
 		dbus_bool_t bret;
 		dbus_error_init(&e);
 		conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
@@ -157,7 +155,7 @@ static uint8_t my_state_write(
 			DBUS_TYPE_INVALID);
 		printf("bret: %d\n", bret);
 		dbus_error_init(&e);
-		rmsg = dbus_connection_send_with_reply_and_block(
+		dbus_connection_send_with_reply_and_block(
 			conn,
 			msg,
 			1000,
@@ -252,32 +250,35 @@ static void my_server_remove(struct btd_adapter *adapter)
 	g_free(my_adapter);
 }
 
-struct notify_data {
+
+
+struct notify_indicate_data {
 	struct my_adapter *my_adapter;
 	uint8_t *value;
 	size_t len;
+	gboolean is_indicate;
 };
 
-struct notify_callback {
+struct notify_indicate_callback {
 	int ref_count;
-	struct notify_data *notify_data;
+	struct notify_indicate_data *data;
 	struct btd_device *device;
 	guint id;
 };
 
-static void decrement_notify_callback(gpointer user_data)
+static void decrement_callback(gpointer user_data)
 {
-	struct notify_callback *cb = user_data;
+	struct notify_indicate_callback *cb = user_data;
 	if (__sync_sub_and_fetch(&cb->ref_count, 1)) return;
-	g_free(cb->notify_data->value);
-	g_free(cb->notify_data);
+	g_free(cb->data->value);
+	g_free(cb->data);
 	g_free(cb);
 }
 
 static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 {
-	struct notify_callback *cb = user_data;
-	struct notify_data *nd = cb->notify_data;
+	struct notify_indicate_callback *cb = user_data;
+	struct notify_indicate_data *nd = cb->data;
 	struct my_adapter *my_adapter = nd->my_adapter;
 	size_t rest = nd->len;
 	size_t offset = 0;
@@ -287,23 +288,32 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 		const uint16_t min_len = sizeof(pdu[0]) + sizeof(uint16_t);
 		size_t payload_len = rest + min_len < len ? rest
 												  : len - min_len;
-		len = enc_notification(my_adapter->hnd_value,
-							   nd->value + offset,
-							   payload_len,
-							   pdu,
-							   len);
+		if (nd->is_indicate) {
+			len = enc_notification(my_adapter->hnd_value,
+								   nd->value + offset,
+								   payload_len,
+								   pdu,
+								   len);
+		}
+		else {
+			len = enc_indication(my_adapter->hnd_value,
+								 nd->value + offset,
+								 payload_len,
+								 pdu,
+								 len);
+		}
 		offset += payload_len;
 		rest -= payload_len;
 		__sync_fetch_and_add(&cb->ref_count, 1);
 		DBG("Send notification for handle: 0x%04x, ccc: 0x%04x",
 			my_adapter->hnd_value,
 			my_adapter->hnd_ccc);
-		g_attrib_send(attrib, 0, pdu, len, NULL, cb, decrement_notify_callback);
+		g_attrib_send(attrib, 0, pdu, len, NULL, cb, decrement_callback);
 	}
-	decrement_notify_callback(cb);
+	decrement_callback(cb);
 }
 
-static gboolean is_notifiable_device(struct btd_device *device, uint16_t ccc)
+static gboolean check_start_status(struct btd_device *device, uint16_t ccc, gboolean is_indicate)
 {
 	char *filename;
 	GKeyFile *key_file;
@@ -330,9 +340,17 @@ static gboolean is_notifiable_device(struct btd_device *device, uint16_t ccc)
 	}
 
 	val = strtol(str, NULL, 16);
-	if (!(val & 0x0001)) {
-		result = FALSE;
-		goto end;
+	if (is_indicate) {
+		if (!(val & 0x0002)) {
+		  result = FALSE;
+		  goto end;
+		}
+	}
+	else {
+		if (!(val & 0x0001)) {
+		  result = FALSE;
+		  goto end;
+		}
 	}
 
 	result = TRUE;
@@ -344,27 +362,32 @@ end:
 	return result;
 }
 
-static void filter_devices_notify(struct btd_device *device, void *user_data)
+static void filter_devices(struct btd_device *device, void *user_data)
 {
-	struct notify_data *notify_data = user_data;
-	struct my_adapter *my_adapter = notify_data->my_adapter;
-	struct notify_callback *cb;
+	struct notify_indicate_data *data = user_data;
+	struct my_adapter *my_adapter = data->my_adapter;
+	struct notify_indicate_callback *cb;
 
-	if (!is_notifiable_device(device, my_adapter->hnd_ccc)) {
+	if (!check_start_status(device, my_adapter->hnd_ccc, data->is_indicate)) {
 		DBG("Device is not notificable\n");
 		return;
 	}
-	DBG("notify");
+	if (data->is_indicate) {
+		DBG("indicate\n");
+	}
+	else {
+		DBG("notify\n");
+	}
 	{
 	  size_t i = 0;
-	  for (; i < notify_data->len; ++i) {
-		printf("%02x ", notify_data->value[i]);
+	  for (; i < data->len; ++i) {
+		printf("%02x ", data->value[i]);
 	  }
 	  printf("\n");
 	}
-	cb = g_new0(struct notify_callback, 1);
+	cb = g_new0(struct notify_indicate_callback, 1);
 	cb->ref_count = 1;
-	cb->notify_data = notify_data;
+	cb->data = data;
 	cb->device = btd_device_ref(device);
 	cb->id = btd_device_add_attio_callback(device,
 						attio_connected_cb, NULL, cb);
@@ -374,15 +397,16 @@ static void filter_devices_notify(struct btd_device *device, void *user_data)
 static void notify_devices(struct my_adapter *my_adapter,
 			uint8_t *value, size_t len)
 {
-	struct notify_data *notify_data;
+	struct notify_indicate_data *data;
 
-	notify_data = g_new0(struct notify_data, 1);
-	notify_data->my_adapter = my_adapter;
-	notify_data->value = g_memdup(value, len);
-	notify_data->len = len;
+	data = g_new0(struct notify_indicate_data, 1);
+	data->my_adapter = my_adapter;
+	data->value = g_memdup(value, len);
+	data->len = len;
+	data->is_indicate = false;
 
-	btd_adapter_for_each_device(my_adapter->adapter, filter_devices_notify,
-					notify_data);
+	btd_adapter_for_each_device(my_adapter->adapter, filter_devices,
+					data);
 }
 
 static DBusMessage *my_notify(DBusConnection *conn, DBusMessage *msg,
@@ -401,10 +425,47 @@ static DBusMessage *my_notify(DBusConnection *conn, DBusMessage *msg,
 	}
 	{
 		struct my_adapter *my_adapter = my_adapters->data;
-		struct btd_adapter *adapter = my_adapter->adapter;
 		printf("size:%d\n", size);
 
 		notify_devices(my_adapter, bytes, size);
+		return dbus_message_new_method_return(msg);
+	}
+}
+
+static void indicate_devices(struct my_adapter *my_adapter,
+			uint8_t *value, size_t len)
+{
+	struct notify_indicate_data *data;
+
+	data = g_new0(struct notify_indicate_data, 1);
+	data->my_adapter = my_adapter;
+	data->value = g_memdup(value, len);
+	data->len = len;
+	data->is_indicate = true;
+
+	btd_adapter_for_each_device(my_adapter->adapter, filter_devices,
+					data);
+}
+
+static DBusMessage *my_indicate(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	uint32_t size;
+	uint8_t* bytes;
+	if (!dbus_message_get_args(msg,
+							   NULL,
+							   DBUS_TYPE_ARRAY,
+							   DBUS_TYPE_BYTE,
+							   &bytes,
+							   &size,
+							   DBUS_TYPE_INVALID)) {
+		return btd_error_invalid_args(msg);
+	}
+	{
+		struct my_adapter *my_adapter = my_adapters->data;
+		printf("size:%d\n", size);
+
+		indicate_devices(my_adapter, bytes, size);
 		return dbus_message_new_method_return(msg);
 	}
 }
@@ -452,6 +513,10 @@ static const GDBusMethodTable my_methods[] = {
 			GDBUS_ARGS(
 				   { "bytes", "ay" }), NULL,
 				   my_notify) },
+	{ GDBUS_METHOD("MyIndicate",
+			GDBUS_ARGS(
+				   { "bytes", "ay" }), NULL,
+				   my_indicate) },
 	{ GDBUS_METHOD("GetMtu",
 			NULL, GDBUS_ARGS(
 				   { "mtu", "i" }),
