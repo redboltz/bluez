@@ -899,9 +899,12 @@ static uint16_t write_value(struct gatt_channel *channel, uint16_t handle,
 		if (a->write_cb) {
 			status = a->write_cb(a, channel->device,
 							a->cb_user_data);
-			if (status)
+			if (status) {
+				a->len = 0;
 				return enc_error_resp(ATT_OP_WRITE_REQ, handle,
 							status, pdu, len);
+			}
+			a->len = 0;
 		}
 	} else {
 		uint16_t cccval = get_le16(value);
@@ -911,6 +914,7 @@ static uint16_t write_value(struct gatt_channel *channel, uint16_t handle,
 		char *data;
 		gsize length = 0;
 
+		a->len = 0;
 		filename = btd_device_get_storage_path(channel->device, "ccc");
 		if (!filename) {
 			warn("Unable to get ccc storage path for device");
