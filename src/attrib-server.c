@@ -959,10 +959,11 @@ static uint16_t prep_write_value(struct gatt_channel *channel, uint16_t handle,
 
 	a->len += vlen;
 	a->data = g_try_realloc(a->data, a->len);
-	if (vlen && a->data == NULL)
+	if (vlen && a->data == NULL) {
+		a->len = 0;
 		return enc_error_resp(ATT_OP_PREP_WRITE_REQ, handle,
 				ATT_ECODE_INSUFF_RESOURCES, pdu, len);
-
+	}
 	memcpy(a->data + offset, value, vlen);
 	return enc_prep_write_resp(handle, offset, value, vlen, pdu, len);
 }
@@ -977,17 +978,19 @@ static uint16_t exec_write(struct gatt_channel *channel, uint16_t handle,
 
 	l = g_list_find_custom(channel->server->database,
 					GUINT_TO_POINTER(h), handle_cmp);
-	if (!l)
+	if (!l) {
 		return enc_error_resp(ATT_OP_EXEC_WRITE_REQ, handle,
 				ATT_ECODE_INVALID_HANDLE, pdu, len);
-
+	}
 	a = l->data;
 
 #if 0
 	status = att_check_reqs(channel, ATT_OP_WRITE_REQ, a->write_req);
-	if (status)
+	if (status) {
+		a->len = 0;
 		return enc_error_resp(ATT_OP_WRITE_REQ, handle, status, pdu,
 									len);
+	}
 #endif
 
 	if (bt_uuid_cmp(&ccc_uuid, &a->uuid) != 0) {
@@ -998,10 +1001,13 @@ static uint16_t exec_write(struct gatt_channel *channel, uint16_t handle,
 		if (a->write_cb) {
 			status = a->write_cb(a, channel->device,
 							a->cb_user_data);
-			if (status)
+			if (status) {
+				a->len = 0;
 				return enc_error_resp(ATT_OP_EXEC_WRITE_REQ, handle,
 							status, pdu, len);
+			}
 		}
+		a->len = 0;
 	} else {
 		uint16_t cccval = get_le16(a->data);
 		char *filename;
@@ -1010,6 +1016,7 @@ static uint16_t exec_write(struct gatt_channel *channel, uint16_t handle,
 		char *data;
 		gsize length = 0;
 
+		a->len = 0;
 		filename = btd_device_get_storage_path(channel->device, "ccc");
 		if (!filename) {
 			warn("Unable to get ccc storage path for device");
