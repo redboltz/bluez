@@ -170,53 +170,6 @@ static uint8_t my_state_write(
 	return 0;
 }
 
-static uint8_t my_state_confirm(
-	struct attribute *a,
-	struct btd_device *device,
-	gpointer user_data)
-{
-	printf("confirm called\n");
-	{
-		DBusError e;
-		DBusConnection* conn;
-		DBusMessage* msg;
-		dbus_bool_t bret;
-		dbus_error_init(&e);
-		conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
-		printf("conn: %p\n", conn);
-		if (dbus_error_is_set(&e)) {
-			printf("name: %s\n", e.name);
-			printf("mesg: %s\n", e.message);
-			return 0;
-		}
-		msg = dbus_message_new_method_call(
-			"org.myapp",
-			"/org/myapp/server",
-			"org.myapp.server",
-			"confirm");
-		bret = dbus_message_append_args(
-			msg,
-			DBUS_TYPE_ARRAY,
-			DBUS_TYPE_BYTE,
-			&a->data,
-			a->len,
-			DBUS_TYPE_INVALID);
-		printf("bret: %d\n", bret);
-		dbus_error_init(&e);
-		dbus_connection_send_with_reply_and_block(
-			conn,
-			msg,
-			1000,
-			&e);
-		if (dbus_error_is_set(&e)) {
-			printf("name: %s\n", e.name);
-			printf("mesg: %s\n", e.message);
-			return 0;
-		}
-	}
-	return 0;
-}
-
 static gboolean register_my_service(struct my_adapter *my_adapter)
 {
 	bt_uuid_t uuid;
@@ -240,11 +193,6 @@ static gboolean register_my_service(struct my_adapter *my_adapter)
 		GATT_OPT_CHR_VALUE_CB,
 		ATTRIB_WRITE,
 		my_state_write,
-		my_adapter,
-
-		GATT_OPT_CHR_VALUE_CB,
-		ATTRIB_CONFIRM,
-		my_state_confirm,
 		my_adapter,
 
 		GATT_OPT_CCC_GET_HANDLE,
@@ -327,6 +275,44 @@ static void decrement_callback(gpointer user_data)
 	g_free(cb);
 }
 
+static void confirm_callback(guint8 status, const guint8 *pdu, guint16 plen, gpointer user_data)
+{
+	DBusError e;
+	DBusConnection* conn;
+	DBusMessage* msg;
+
+	if (status) {
+		printf("Indication NOT confirmed\n");
+		printf("status:%d, pdu[0]:%d, plen:%d\n", (int)status, (int)pdu[0], (int)plen);
+		return;
+	}
+
+	dbus_error_init(&e);
+	conn  = dbus_bus_get(DBUS_BUS_SYSTEM, &e);
+	printf("conn: %p\n", conn);
+	if (dbus_error_is_set(&e)) {
+		printf("name: %s\n", e.name);
+		printf("mesg: %s\n", e.message);
+		return;
+	}
+	msg = dbus_message_new_method_call(
+		"org.myapp",
+		"/org/myapp/server",
+		"org.myapp.server",
+		"confirm");
+	dbus_error_init(&e);
+	dbus_connection_send_with_reply_and_block(
+		conn,
+		msg,
+		1000,
+		&e);
+	if (dbus_error_is_set(&e)) {
+		printf("name: %s\n", e.name);
+		printf("mesg: %s\n", e.message);
+		return;
+	}
+}
+
 static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 {
 	struct notify_indicate_callback *cb = user_data;
@@ -341,18 +327,18 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 		size_t payload_len = rest + min_len < len ? rest
 												  : len - min_len;
 		if (nd->is_indicate) {
-			len = enc_notification(my_adapter->hnd_value,
-								   nd->value + offset,
-								   payload_len,
-								   pdu,
-								   len);
-		}
-		else {
 			len = enc_indication(my_adapter->hnd_value,
 								 nd->value + offset,
 								 payload_len,
 								 pdu,
 								 len);
+		}
+		else {
+			len = enc_notification(my_adapter->hnd_value,
+								   nd->value + offset,
+								   payload_len,
+								   pdu,
+								   len);
 		}
 		offset += payload_len;
 		rest -= payload_len;
@@ -360,7 +346,7 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 		DBG("Send notification for handle: 0x%04x, ccc: 0x%04x",
 			my_adapter->hnd_value,
 			my_adapter->hnd_ccc);
-		g_attrib_send(attrib, 0, pdu, len, NULL, cb, decrement_callback);
+		g_attrib_send(attrib, 0, pdu, len, confirm_callback, cb, decrement_callback);
 	}
 	decrement_callback(cb);
 }

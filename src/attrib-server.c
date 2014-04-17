@@ -949,7 +949,6 @@ static uint16_t prep_write_value(struct gatt_channel *channel, uint16_t handle,
 					uint8_t *pdu, size_t len)
 {
 	struct attribute *a;
-	uint8_t status;
 	GList *l;
 	guint h = handle;
 
