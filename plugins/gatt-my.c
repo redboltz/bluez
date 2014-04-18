@@ -304,7 +304,7 @@ static void confirm_callback(guint8 status, const guint8 *pdu, guint16 plen, gpo
 	dbus_connection_send_with_reply_and_block(
 		conn,
 		msg,
-		1000,
+		10000,
 		&e);
 	if (dbus_error_is_set(&e)) {
 		printf("name: %s\n", e.name);
@@ -531,7 +531,7 @@ static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
 		dbus_bool_t bret;
 		rmsg = dbus_message_new_method_return(msg);
 		DBG("rmsg:%p\n", rmsg);
-		bret = dbus_message_append_args(rmsg, DBUS_TYPE_UINT32, &mtu);
+		bret = dbus_message_append_args(rmsg, DBUS_TYPE_UINT32, &mtu, DBUS_TYPE_INVALID);
 		DBG("bret = %d\n", bret);
 		DBG("mtu = %d\n", (int)mtu);
 		return rmsg;
@@ -557,7 +557,7 @@ static const GDBusMethodTable my_methods[] = {
 				   my_indicate) },
 	{ GDBUS_METHOD("GetMtu",
 			NULL, GDBUS_ARGS(
-				   { "mtu", "i" }),
+				   { "mtu", "u" }),
 				   get_mtu) },
 	{ }
 };
