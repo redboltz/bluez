@@ -269,7 +269,9 @@ struct notify_indicate_callback {
 static void decrement_callback(gpointer user_data)
 {
 	struct notify_indicate_callback *cb = user_data;
+	btd_device_unref(cb->device);
 	if (__sync_sub_and_fetch(&cb->ref_count, 1)) return;
+	btd_device_remove_attio_callback(cb->device, cb->id);
 	g_free(cb->data->value);
 	g_free(cb->data);
 	g_free(cb);
@@ -342,6 +344,7 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 		}
 		offset += payload_len;
 		rest -= payload_len;
+		cb->device = btd_device_ref(cb->device);
 		__sync_fetch_and_add(&cb->ref_count, 1);
 		DBG("Send notification for handle: 0x%04x, ccc: 0x%04x",
 			my_adapter->hnd_value,
