@@ -253,6 +253,7 @@ static void my_server_remove(struct btd_adapter *adapter)
 
 
 struct notify_indicate_data {
+	int ref_count;
 	struct my_adapter *my_adapter;
 	uint8_t *value;
 	size_t len;
@@ -268,13 +269,17 @@ struct notify_indicate_callback {
 
 static void decrement_callback(gpointer user_data)
 {
-	struct notify_indicate_callback *cb = user_data;
+	struct notify_indicate_callback* cb = user_data;
+	struct notify_indicate_data* data = cb->data;
+
 	btd_device_unref(cb->device);
 	if (__sync_sub_and_fetch(&cb->ref_count, 1)) return;
 	btd_device_remove_attio_callback(cb->device, cb->id);
-	g_free(cb->data->value);
-	g_free(cb->data);
 	g_free(cb);
+
+	if (__sync_sub_and_fetch(&data->ref_count, 1)) return;
+	g_free(data->value);
+	g_free(data);
 }
 
 static void confirm_callback(guint8 status, const guint8 *pdu, guint16 plen, gpointer user_data)
@@ -427,8 +432,13 @@ static void filter_devices(struct btd_device *device, void *user_data)
 	  printf("\n");
 	}
 	cb = g_new0(struct notify_indicate_callback, 1);
+	if (!cb) {
+		printf("NOMEM cb\n");
+		return;
+	}
 	cb->ref_count = 1;
 	cb->data = data;
+	__sync_fetch_and_add(&data->ref_count, 1);
 	cb->device = btd_device_ref(device);
 	cb->id = btd_device_add_attio_callback(device,
 						attio_connected_cb, NULL, cb);
@@ -441,8 +451,18 @@ static void notify_devices(struct my_adapter *my_adapter,
 	struct notify_indicate_data *data;
 
 	data = g_new0(struct notify_indicate_data, 1);
+	if (!data) {
+		printf("NOMEM data\n");
+		return;
+	}
+	data->ref_count = 1;
 	data->my_adapter = my_adapter;
 	data->value = g_memdup(value, len);
+	if (!data->value) {
+		printf("NOMEM data->value\n");
+		g_free(data);
+		return;
+	}
 	data->len = len;
 	data->is_indicate = false;
 
