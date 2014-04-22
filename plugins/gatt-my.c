@@ -516,6 +516,9 @@ static void get_min_mtu(struct btd_device *device, void *user_data)
 	size_t* mtu = user_data;
 	size_t ret_mtu = min_mtu_from_device(device);
 	DBG("ret_mtu:%d\n", (int)ret_mtu);
+	if ((int)ret_mtu < ATT_DEFAULT_LE_MTU) {
+		ret_mtu = ATT_DEFAULT_LE_MTU;
+	}
 	if (ret_mtu < *mtu) *mtu = ret_mtu;
 }
 
