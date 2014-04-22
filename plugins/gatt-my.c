@@ -274,7 +274,10 @@ static void decrement_callback(gpointer user_data)
 
 	btd_device_unref(cb->device);
 	if (__sync_sub_and_fetch(&cb->ref_count, 1)) return;
-	btd_device_remove_attio_callback(cb->device, cb->id);
+
+	/* FIXME: The following function should be called somewhere, but not here. */
+	/* btd_device_remove_attio_callback(cb->device, cb->id); */
+
 	g_free(cb);
 
 	if (__sync_sub_and_fetch(&data->ref_count, 1)) return;
@@ -386,6 +389,7 @@ static gboolean check_start_status(struct btd_device *device, uint16_t ccc, gboo
 	}
 
 	val = strtol(str, NULL, 16);
+	printf("CCC VALUE %04x\n", (int)val);
 	if (is_indicate) {
 		if (!(val & 0x0002)) {
 		  result = FALSE;
@@ -455,7 +459,7 @@ static void notify_devices(struct my_adapter *my_adapter,
 		printf("NOMEM data\n");
 		return;
 	}
-	data->ref_count = 1;
+	data->ref_count = 0;
 	data->my_adapter = my_adapter;
 	data->value = g_memdup(value, len);
 	if (!data->value) {
