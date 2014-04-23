@@ -556,6 +556,8 @@ static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
 {
 	struct my_adapter *my_adapter = my_adapters->data;
 	size_t mtu = UINT_MAX;
+	printf("num of dev %d\n", (int)btd_adapter_num_of_devices(my_adapter->adapter));
+
 	DBG("print\n");
 	btd_adapter_for_each_device(my_adapter->adapter, print,
 								NULL);

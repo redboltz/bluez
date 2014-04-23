@@ -6787,3 +6787,8 @@ void adapter_shutdown(void)
 	if (!adapter_remaining)
 		btd_exit();
 }
+
+size_t btd_adapter_num_of_devices(struct btd_adapter const* adapter)
+{
+	return g_slist_length(adapter->devices);
+}

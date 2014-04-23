@@ -199,3 +199,4 @@ gboolean btd_adapter_check_oob_handler(struct btd_adapter *adapter);
 void btd_adapter_for_each_device(struct btd_adapter *adapter,
 			void (*cb)(struct btd_device *device, void *data),
 			void *data);
+size_t btd_adapter_num_of_devices(struct btd_adapter const* adapter);
