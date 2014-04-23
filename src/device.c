@@ -4902,92 +4902,43 @@ void btd_device_cleanup(void)
 
 void device_print(struct btd_device const* dev)
 {
-  char buf[100];
-  printf("---device info----\n");
+	char buf[100];
+	printf("---device info----\n");
 
-  printf("ref_count %d\n", (int)dev->ref_count);
+	printf("ref_count %d\n", (int)dev->ref_count);
 
-  ba2str(&dev->bdaddr, buf);
-  printf("bdaddr %s\n", buf);
+	ba2str(&dev->bdaddr, buf);
+	printf("bdaddr %s\n", buf);
 
-  printf("bdaddr type %d\n", (int)dev->bdaddr_type);
+	printf("bdaddr type %d\n", (int)dev->bdaddr_type);
 
-  if (dev->path) {
-	printf("path %s\n", dev->path);
-  }
+	if (dev->path) {
+		printf("path %s\n", dev->path);
+	}
 
-  printf("bredr %d\n", (int)dev->bredr);
-  printf("le %d\n", (int)dev->le);
-  printf("pending_paired %d\n", (int)dev->pending_paired);
-  printf("svc_refreshed %d\n", (int)dev->svc_refreshed);
+	printf("bredr %d\n", (int)dev->bredr);
+	printf("le %d\n", (int)dev->le);
+	printf("pending_paired %d\n", (int)dev->pending_paired);
+	printf("svc_refreshed %d\n", (int)dev->svc_refreshed);
 
-  if (dev->svc_callbacks) {
-	printf("Num of svc_callbacks %d\n", (int)g_slist_length(dev->svc_callbacks));
-  }
-  if (dev->eir_uuids) {
-	printf("Num of eir_uuids %d\n", (int)g_slist_length(dev->eir_uuids));
-  }
+	if (dev->svc_callbacks) {
+		printf("Num of svc_callbacks %d\n", (int)g_slist_length(dev->svc_callbacks));
+	}
+	if (dev->eir_uuids) {
+		printf("Num of eir_uuids %d\n", (int)g_slist_length(dev->eir_uuids));
+	}
 
-  printf("name %s\n", dev->name);
-  if (dev->alias) {
-	printf("alias %s\n", dev->alias);
-  }
-  printf("attrib %p\n", dev->attrib);
-  if (dev->attios) {
-	printf("Num of attios %d\n", (int)g_slist_length(dev->attios));
-  }
-  if (dev->attios_offline) {
-	printf("Num of attios offline%d\n", (int)g_slist_length(dev->attios_offline));
-  }
-  printf("att_io %p\n", dev->att_io);
-#if 0
-	uint32_t	class;
-	uint16_t	vendor_src;
-	uint16_t	vendor;
-	uint16_t	product;
-	uint16_t	version;
-	uint16_t	appearance;
-	char		*modalias;
-	struct btd_adapter	*adapter;
-	GSList		*uuids;
-	GSList		*primaries;		/* List of primary services */
-	GSList		*services;		/* List of btd_service */
-	GSList		*pending;		/* Pending services */
-	GSList		*watches;		/* List of disconnect_data */
-	gboolean	temporary;
-	guint		disconn_timer;
-	guint		discov_timer;
-	struct browse_req *browse;		/* service discover request */
-	struct bonding_req *bonding;
-	struct authentication_req *authr;	/* authentication request */
-	GSList		*disconnects;		/* disconnects message */
-	DBusMessage	*connect;		/* connect message */
-	DBusMessage	*disconnect;		/* disconnect message */
-	GAttrib		*attrib;
-	GSList		*attios;
-	GSList		*attios_offline;
-	guint		attachid;		/* Attrib server attach */
-
-	struct bearer_state bredr_state;
-	struct bearer_state le_state;
-
-	sdp_list_t	*tmp_records;
-
-	time_t		bredr_seen;
-	time_t		le_seen;
-
-	gboolean	trusted;
-	gboolean	blocked;
-	gboolean	auto_connect;
-	gboolean	disable_auto_connect;
-	gboolean	general_connect;
-
-	bool		legacy;
-	int8_t		rssi;
-
-	GIOChannel	*att_io;
-	guint		cleanup_id;
-	guint		store_id;
-};
-#endif
+	printf("name %s\n", dev->name);
+	if (dev->alias) {
+		printf("alias %s\n", dev->alias);
+	}
+	printf("attrib %p\n", dev->attrib);
+	if (dev->attios) {
+		printf("Num of attios %d\n", (int)g_slist_length(dev->attios));
+	}
+	if (dev->attios_offline) {
+		printf("Num of attios offline%d\n", (int)g_slist_length(dev->attios_offline));
+	}
+	printf("att_io %p\n", dev->att_io);
+	printf("le_state->connected %d\n", dev->le_state.connected);
 }
