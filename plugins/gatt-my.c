@@ -546,12 +546,19 @@ static void get_min_mtu(struct btd_device *device, void *user_data)
 	if (ret_mtu < *mtu) *mtu = ret_mtu;
 }
 
+static void print(struct btd_device *device, void *user_data)
+{
+  device_print(device);
+}
 
 static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
 	struct my_adapter *my_adapter = my_adapters->data;
 	size_t mtu = UINT_MAX;
+	DBG("print\n");
+	btd_adapter_for_each_device(my_adapter->adapter, print,
+								NULL);
 	DBG("get_mtu\n");
 	btd_adapter_for_each_device(my_adapter->adapter, get_min_mtu,
 								&mtu);
