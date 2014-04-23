@@ -1043,6 +1043,7 @@ static struct btd_device *adapter_create_device(struct btd_adapter *adapter,
 	btd_device_set_temporary(device, TRUE);
 
 	DBG("Device added.");
+	DBG("Adapter %p\n", adapter);
 	device_print(device);
 
 	adapter->devices = g_slist_append(adapter->devices, device);

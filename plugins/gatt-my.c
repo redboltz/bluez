@@ -65,6 +65,11 @@ struct my_adapter {
 
 static GSList *my_adapters = NULL;
 
+static void print(struct btd_device *device, void *user_data)
+{
+  device_print(device);
+}
+
 static uint8_t my_state_read(
 	struct attribute *a,
 	struct btd_device *device,
@@ -216,6 +221,14 @@ static int my_server_probe(struct btd_adapter *adapter)
 		g_free(my_adapter);
 		return -EIO;
 	}
+
+	DBG("my_adapter %p is appended (adapter = %p)\n", my_adapter, my_adapter->adapter);
+	printf("num of dev %d\n", (int)btd_adapter_num_of_devices(my_adapter->adapter));
+
+	DBG("print\n");
+	btd_adapter_for_each_device(my_adapter->adapter, print,
+								NULL);
+
 	my_adapters = g_slist_append(my_adapters, my_adapter);
 
 	return 0;
@@ -544,11 +557,6 @@ static void get_min_mtu(struct btd_device *device, void *user_data)
 		ret_mtu = ATT_DEFAULT_LE_MTU;
 	}
 	if (ret_mtu < *mtu) *mtu = ret_mtu;
-}
-
-static void print(struct btd_device *device, void *user_data)
-{
-  device_print(device);
 }
 
 static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
