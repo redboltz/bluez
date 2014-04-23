@@ -1042,6 +1042,9 @@ static struct btd_device *adapter_create_device(struct btd_adapter *adapter,
 
 	btd_device_set_temporary(device, TRUE);
 
+	DBG("Device added.");
+	device_print(device);
+
 	adapter->devices = g_slist_append(adapter->devices, device);
 
 	return device;
@@ -1073,8 +1076,12 @@ void btd_adapter_remove_device(struct btd_adapter *adapter,
 {
 	GList *l;
 
+	DBG("Connect list removed.");
+	device_print(dev);
 	adapter->connect_list = g_slist_remove(adapter->connect_list, dev);
 
+	DBG("Device removed.");
+	device_print(dev);
 	adapter->devices = g_slist_remove(adapter->devices, dev);
 
 	adapter->discovery_found = g_slist_remove(adapter->discovery_found,
@@ -3015,6 +3022,9 @@ int adapter_connect_list_add(struct btd_adapter *adapter,
 		return -ENOTSUP;
 	}
 
+	DBG("Connect list added.");
+	device_print(device);
+
 	adapter->connect_list = g_slist_append(adapter->connect_list, device);
 	DBG("%s added to %s's connect_list", device_get_path(device),
 							adapter->system_name);
@@ -3044,6 +3054,8 @@ void adapter_connect_list_remove(struct btd_adapter *adapter,
 		return;
 	}
 
+	DBG("Connect list removed.");
+	device_print(device);
 	adapter->connect_list = g_slist_remove(adapter->connect_list, device);
 	DBG("%s removed from %s's connect_list", device_get_path(device),
 							adapter->system_name);
