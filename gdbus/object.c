@@ -1349,7 +1349,7 @@ gboolean g_dbus_register_interface(DBusConnection *connection,
 
 	if (find_interface(data->interfaces, name)) {
 		debug("Interface '%s' is already registerd\n", name);
-		remove_interface(data, name);
+		return TRUE;
 #if 0
 		object_path_unref(connection, path);
 		return FALSE;
