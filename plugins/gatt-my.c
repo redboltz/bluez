@@ -431,6 +431,7 @@ static void filter_devices(struct btd_device *device, void *user_data)
 	struct my_adapter *my_adapter = data->my_adapter;
 	struct notify_indicate_callback *cb;
 
+	if (!btd_device_le_connected(device)) return;
 	if (!check_start_status(device, my_adapter->hnd_ccc, data->is_indicate)) {
 		DBG("Device is not notificable\n");
 		return;
@@ -550,13 +551,15 @@ static DBusMessage *my_indicate(DBusConnection *conn, DBusMessage *msg,
 
 static void get_min_mtu(struct btd_device *device, void *user_data)
 {
-	size_t* mtu = user_data;
-	size_t ret_mtu = min_mtu_from_device(device);
-	DBG("ret_mtu:%d\n", (int)ret_mtu);
-	if ((int)ret_mtu < ATT_DEFAULT_LE_MTU) {
-		ret_mtu = ATT_DEFAULT_LE_MTU;
+	if (btd_device_le_connected(device)) {
+		size_t* mtu = user_data;
+		size_t ret_mtu = min_mtu_from_device(device);
+		DBG("ret_mtu:%d\n", (int)ret_mtu);
+		if ((int)ret_mtu < ATT_DEFAULT_LE_MTU) {
+			ret_mtu = ATT_DEFAULT_LE_MTU;
+		}
+		if (ret_mtu < *mtu) *mtu = ret_mtu;
 	}
-	if (ret_mtu < *mtu) *mtu = ret_mtu;
 }
 
 static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,

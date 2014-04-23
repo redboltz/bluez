@@ -149,4 +149,6 @@ int device_discover_services(struct btd_device *device);
 
 void btd_device_init(void);
 void btd_device_cleanup(void);
+bool btd_device_le_connected(struct btd_device const* dev);
+
 void device_print(struct btd_device const* dev);

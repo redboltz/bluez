@@ -4900,6 +4900,12 @@ void btd_device_cleanup(void)
 	btd_service_remove_state_cb(service_state_cb_id);
 }
 
+bool btd_device_le_connected(struct btd_device const* dev)
+{
+	return dev->le_state.connected;
+}
+
+
 void device_print(struct btd_device const* dev)
 {
 	char buf[100];
