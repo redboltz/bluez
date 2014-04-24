@@ -1440,6 +1440,8 @@ static void connect_event(GIOChannel *io, GError *gerr, void *user_data)
 		return;
 
 	device = btd_adapter_get_device(adapter, &dst, dst_type);
+	printf("device: %p\n", device);
+	printf("dst_type: %d\n", dst_type);
 	if (!device)
 		return;
 

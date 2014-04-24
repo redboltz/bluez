@@ -431,7 +431,6 @@ static void filter_devices(struct btd_device *device, void *user_data)
 	struct my_adapter *my_adapter = data->my_adapter;
 	struct notify_indicate_callback *cb;
 
-	if (!btd_device_le_connected(device)) return;
 	if (!check_start_status(device, my_adapter->hnd_ccc, data->is_indicate)) {
 		DBG("Device is not notificable\n");
 		return;
@@ -551,19 +550,17 @@ static DBusMessage *my_indicate(DBusConnection *conn, DBusMessage *msg,
 
 static void get_min_mtu(struct btd_device *device, void *user_data)
 {
-	if (btd_device_le_connected(device)) {
-		size_t* mtu = user_data;
-		size_t ret_mtu = min_mtu_from_device(device);
-		DBG("ret_mtu:%d\n", (int)ret_mtu);
-		if ((int)ret_mtu < ATT_DEFAULT_LE_MTU) {
-			ret_mtu = ATT_DEFAULT_LE_MTU;
-		}
-		if (ret_mtu < *mtu) *mtu = ret_mtu;
+	size_t* mtu = user_data;
+	size_t ret_mtu = min_mtu_from_device(device);
+	DBG("ret_mtu:%d\n", (int)ret_mtu);
+	if ((int)ret_mtu < ATT_DEFAULT_LE_MTU) {
+		ret_mtu = ATT_DEFAULT_LE_MTU;
 	}
+	if (ret_mtu < *mtu) *mtu = ret_mtu;
 }
 
-static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
-								void *data)
+static DBusMessage *get_max_payload_size(DBusConnection *conn, DBusMessage *msg,
+										 void *data)
 {
 	struct my_adapter *my_adapter = my_adapters->data;
 	size_t mtu = UINT_MAX;
@@ -579,6 +576,9 @@ static DBusMessage *get_mtu(DBusConnection *conn, DBusMessage *msg,
 	{
 		DBusMessage* rmsg;
 		dbus_bool_t bret;
+		size_t header = sizeof(uint16_t) + sizeof(uint8_t);
+		if (mtu == UINT_MAX) mtu = 0;
+		else mtu -= header;
 		rmsg = dbus_message_new_method_return(msg);
 		DBG("rmsg:%p\n", rmsg);
 		bret = dbus_message_append_args(rmsg, DBUS_TYPE_UINT32, &mtu, DBUS_TYPE_INVALID);
@@ -605,10 +605,10 @@ static const GDBusMethodTable my_methods[] = {
 			GDBUS_ARGS(
 				   { "bytes", "ay" }), NULL,
 				   my_indicate) },
-	{ GDBUS_METHOD("GetMtu",
+	{ GDBUS_METHOD("GetMaxPayloadSize",
 			NULL, GDBUS_ARGS(
-				   { "mtu", "u" }),
-				   get_mtu) },
+				   { "size", "u" }),
+				   get_max_payload_size) },
 	{ }
 };
 
